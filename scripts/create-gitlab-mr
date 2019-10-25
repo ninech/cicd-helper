@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+
+set -e
+
+## FUNCTIONS ##
+
+function usage() {
+  echo "Usage: $0 [-r] [-i <title>] [-d <description>] [-s <server>] [-p <project ID>] [-t <token>] <source branch> <target branch>" 1>&2
+  echo "Parameters:"
+  echo -e "-r\tshould the source branch be removed after merge"
+  echo -e "-i\tthe title of the merge request"
+  echo -e "-d\tan optional description of the merge request"
+  echo -e "-s\tthe gitlab server to use (default: \"gitlab.com\")"
+  echo -e "-p\tthe gitlab project id (default: content of the environment variable CI_PROJECT_ID)"
+  echo -e "-t\tthe private gitlab token to use (default: content of the environment variable PRIVATE_TOKEN)"
+}
+
+check_empty() {
+  local content="$1"
+  local name="$2"
+
+  if [ -z "${content}" ]; then
+    echo "$name can not be empty..." 1>&2
+    echo
+    usage
+    exit 1
+  fi
+}
+
+## MAIN ##
+
+title="merge request"
+description=""
+remove_source_branch="false"
+server="gitlab.com"
+project_id="${CI_PROJECT_ID}"
+token="${PRIVATE_TOKEN}"
+
+while getopts ":hs:ri:d:p:t:" opt; do
+    case "${opt}" in
+        h)
+            usage
+            exit 0
+            ;;
+        r)
+            remove_source_branch=1
+            ;;
+        i)  title="${OPTARG}"
+            ;;
+        d)  description="${OPTARG}"
+            ;;
+        s)
+            server="${OPTARG}"
+            ;;
+        p)
+            project_id="${OPTARG}"
+            ;;
+        t)
+            token="${OPTARG}"
+            ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+source_branch="$1"
+target_branch="$2"
+api_url="${server}/api/v4"
+
+check_empty "$source_branch" "source branch"
+check_empty "$target_branch" "target branch"
+check_empty "$project_id" "gitlab project ID"
+check_empty "$token" "gitlab private access token"
+check_empty "$server" "gitlab server"
+
+# the content of our merge request
+body="{
+    \"id\": ${project_id},
+    \"source_branch\": \"${source_branch}\",
+    \"target_branch\": \"${target_branch}\",
+    \"remove_source_branch\": ${remove_source_branch},
+    \"title\": \"${title}\",
+    \"description\": \"${description}\"
+}";
+
+# Require a list of all the merge requests and take a look if there is already
+# one with the same source and target branch combination
+list_mr="$(curl --silent --show-error "https://${api_url}/projects/${project_id}/merge_requests?state=opened&source_branch=${source_branch}&target_branch=${target_branch}" --header "PRIVATE-TOKEN:${token}")"
+
+# create a new MR if there is none already
+if [ "${list_mr}" == "[]" ]; then
+  return_json="$(curl --silent --show-error -X POST "https://${api_url}/projects/${project_id}/merge_requests" \
+    --header "PRIVATE-TOKEN:${token}" \
+    --header "Content-Type: application/json" \
+    --data "${body}")"
+
+  url="$(echo "$return_json" | jq '.web_url')"
+
+  echo "Opened a new merge request: ${url}";
+  exit;
+fi
+
+echo "No new merge request opened (it already existed one)";
