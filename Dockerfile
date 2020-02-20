@@ -1,4 +1,4 @@
-FROM mikefarah/yq:latest AS yq
+FROM mikefarah/yq:3.1.1 AS yq
 FROM google/cloud-sdk:latest
 
 ARG ARGOCD_VERSION=v1.2.5
