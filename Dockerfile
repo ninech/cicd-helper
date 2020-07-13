@@ -1,7 +1,7 @@
 FROM mikefarah/yq:3.1.1 AS yq
 FROM google/cloud-sdk:latest
 
-ARG ARGOCD_VERSION=v1.5.2
+ARG ARGOCD_VERSION=v1.6.1
 ARG KUSTOMIZE_VERSION=v3.5.4
 
 COPY --from=yq /usr/bin/yq /usr/bin/yq
